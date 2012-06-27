@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <title>freeswitch-redfone by lfurrea</title>
+  </head>
+
+  <body>
+    <div id="container">
+      <div class="inner">
+
+        <header>
+          <h1>freeswitch-redfone</h1>
+          <h2>Freeswitch &amp; Redfone Interoperability Documentation</h2>
+        </header>
+
+        <section id="downloads" class="clearfix">
+          <a href="https://github.com/lfurrea/freeswitch-redfone/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
+          <a href="https://github.com/lfurrea/freeswitch-redfone/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
+          <a href="https://github.com/lfurrea/freeswitch-redfone" id="view-on-github" class="button"><span>View on GitHub</span></a>
+        </section>
+
+        <hr>
+
+        <section id="main_content">
+          <h3>Introduction</h3>
+
+<p>This document summarizes the steps involved in setting up the fonebridge2 T1/E1 PRI-to-Ethernet Bridge with FreeSWITCH via the FreeTDM/libpri/DAHDI stack.</p>
+
+<p>For this lab environment we used: </p>
+
+<h4>Linux Distro</h4>
+
+<p>Debian Squeeze 6.0 
+2.6.32-5-amd64</p>
+
+<h4>FreesWITCH</h4>
+
+<p>FreeSWITCH Version 1.2.0-rc2 
+commit 7dc9a9cacc5366fb04748a89aa7556da8d68e57c
+Date:   Mon Jun 25 15:31:58 2012 -0500</p>
+
+<h4>DAHDI/Libpri</h4>
+
+<p>DAHDI 2.4.1
+Libpri 1.4.12</p>
+
+<p>FreeTDM is a library that implements a high level API for handling I/O and telephony signaling for multiple boards and the fonebridge2 T1/E1 bridge terminations are no exception. </p>
+
+<h4>I/O Modules</h4>
+
+<p>The fonebridge2 uses the DAHDI interface and the DAHDI/IO module in FreeTDM (ftmod_zt) to read and write raw data from/to the board and the FreeTDM application, this module also achieves executing commands in the board.</p>
+
+<h4>Signaling Modules</h4>
+
+<p>As explained before the IO module does not interpret any telephony signaling going through and therefore a signaling module is required for this. This document uses the libpri module (ftmod_libpri) for the E1 PRI signaling but FreeTDM supports other PRI stacks as well as MFC-R2 for R2 signaling.</p>
+
+<h3>Installation</h3>
+
+<p>FreeTDM is a library and as such can be installed alone, but in this document we consider its installation as part of the FreeSWITCH installation since it was born as a part of FreeSWITCH, and the source code is still part of the FreeSWITCH main repository.</p>
+
+<pre><code>$ cd /usr/local/src
+$ git clone git://git.freeswitch.org/freeswitch.git
+$ cd /usr/local/src/freeswitch
+</code></pre>
+
+<p>If Git was used to download, the configuration files must be built before the first compile. Once this is performed it's not normally required to be performed again:</p>
+
+<pre><code>$ ./bootstrap.sh
+</code></pre>
+
+<p>This creates many files including modules.conf, go ahead and uncomment the freetdm line in modules.conf</p>
+
+<pre><code>../../libs/freetdm/mod_freetdm
+</code></pre>
+
+<pre><code>$ ./configure
+$ make
+$ make install
+</code></pre>
+
+<p>If you already have installed libpri the configure script will set things up so that ftmod_libpri is built, if you already have built your FreeSWITCH and are only building FreeTDM do as follows:</p>
+
+<pre><code>$ cd libs/freetdm
+$ ./configure --with-libpri --prefix=/usr/local/freeswitch
+$ make
+$ make install
+</code></pre>
+
+<h3>Configuration</h3>
+
+<h4>The Library</h4>
+
+<p>First we must configure the library (the freetdm library) which is done via a simple text file (not XML) located at <em>/usr/local/freeswitch/freetdm.conf</em>, when FreeTDM is installed as part of FreeSWITCH. This file configures the IO module and therefore it does not deal with any kind of telephony signaling parameters and we only configure which spans and channels to use, the trunk type, groups, audio gains. This may reflect the configurations you have on your /etc/dahdi/system.conf.</p>
+
+<p>An example for a 4 E1 fonebridge2 board follows:</p>
+
+<pre><code>;ISDN PRI with DAHDI                                                                                                           
+[span zt FreeTDM1]
+name =&gt; firstcircuit
+number =&gt; 1
+trunk_type =&gt; E1
+b-channel=1-15
+d-channel=16
+b-channel=17-31
+
+[span zt FreeTDM2]
+name =&gt; secondcircuit
+number =&gt; 2
+trunk_type =&gt; E1
+b-channel=32-46
+d-channel=47
+b-channel=48-62
+
+[span zt FreeTDM3]
+name =&gt; thirdcircuit
+number =&gt; 3
+trunk_type =&gt; E1
+b-channel=63-77
+d-channel=78
+b-channel=79-93
+
+[span zt FreeTDM4]
+name =&gt; fourthcircuit
+number =&gt; 4
+trunk_type =&gt; E1
+b-channel=94-108
+d-channel=109
+b-channel=110-124
+</code></pre>
+
+<h4>The signaling</h4>
+
+<p>After configuring the library we need to actually tell FreeSWITCH to use it and tell it which signaling settings to use and where to send the incoming calls to.</p>
+
+<p>This is done via a typical FreeSWITCH XML configuration file located autoload_configs/freetdm.conf.xml</p>
+
+<p>Which for our 4 E1 board will look like this:</p>
+
+<pre><code>&lt;configuration name="freetdm.conf" description="FreeTDM Configuration"&gt;
+
+        &lt;settings&gt;
+                &lt;param name="debug" value="0"/&gt;
+                &lt;!--&lt;param name="hold-music" value="$${moh_uri}"/&gt;--&gt;
+                &lt;!-- Analog global options (they apply to all spans)                                                           
+                     Remember you can only choose between either call-swap                                                     
+                     or 3-way, not both!                                                                                       
+                --&gt;
+                &lt;!--&lt;param name="enable-analog-option" value="call-swap"/&gt;--&gt;
+                &lt;!--&lt;param name="enable-analog-option" value="3-way"/&gt;--&gt;
+                &lt;!--                                                                                                           
+                Refuse to load the module if there is configuration errors                                                     
+                Defaults to 'no'                                                                                               
+                --&gt;
+                &lt;!--&lt;param name="fail-on-error" value="no"/&gt;--&gt;
+        &lt;/settings&gt;
+
+        &lt;!-- Spans will be configured by the libpri module ftmod_libpri --&gt;
+        &lt;libpri_spans&gt;
+                &lt;span name="FreeTDM1"&gt;
+                  &lt;param name="node" value="cpe"/&gt;
+                  &lt;param name="switch"   value="euroisdn"/&gt;
+                  &lt;!-- &lt;param name="opts" value="omit_redirecting_number"/&gt; --&gt;
+                  &lt;!-- &lt;param name="dp" value="unknown"/&gt; --&gt;
+                  &lt;param name="debug" value="none"/&gt;
+                  &lt;!-- &lt;param name="debug"    value="q931_all"/&gt; --&gt;
+                  &lt;param name="dialplan" value="XML"/&gt;
+                  &lt;param name="context" value="public"/&gt;
+                  &lt;param name="l1" value="alaw"/&gt;
+                &lt;/span&gt;
+
+                &lt;span name="FreeTDM2"&gt;
+                  &lt;param name="node" value="cpe"/&gt;
+                  &lt;param name="switch"   value="euroisdn"/&gt;
+                  &lt;!-- &lt;param name="opts" value="omit_redirecting_number"/&gt; --&gt;
+                  &lt;!-- &lt;param name="dp" value="unknown"/&gt; --&gt;
+                  &lt;param name="debug" value="none"/&gt;
+                  &lt;!-- &lt;param name="debug"    value="q931_all"/&gt; --&gt;
+                  &lt;param name="dialplan" value="XML"/&gt;
+                  &lt;param name="context" value="public"/&gt;
+                  &lt;param name="l1" value="alaw"/&gt;
+ &lt;/span&gt;
+
+                &lt;span name="FreeTDM3"&gt;
+                  &lt;param name="node" value="cpe"/&gt;
+                  &lt;param name="switch"   value="euroisdn"/&gt;
+                  &lt;!-- &lt;param name="opts" value="omit_redirecting_number"/&gt; --&gt;
+                  &lt;!-- &lt;param name="dp" value="unknown"/&gt; --&gt;
+                  &lt;param name="debug" value="none"/&gt;
+                  &lt;!-- &lt;param name="debug"    value="q931_all"/&gt; --&gt;
+                  &lt;param name="dialplan" value="XML"/&gt;
+                  &lt;param name="context" value="public"/&gt;
+                  &lt;param name="l1" value="alaw"/&gt;
+                &lt;/span&gt;
+
+                &lt;span name="FreeTDM4"&gt;
+                  &lt;param name="node" value="cpe"/&gt;
+                  &lt;param name="switch"   value="euroisdn"/&gt;
+                  &lt;!-- &lt;param name="opts" value="omit_redirecting_number"/&gt; --&gt;
+                  &lt;!-- &lt;param name="dp" value="unknown"/&gt; --&gt;
+                  &lt;param name="debug" value="none"/&gt;
+                  &lt;!-- &lt;param name="debug"    value="q931_all"/&gt; --&gt;
+                  &lt;param name="dialplan" value="XML"/&gt;
+                  &lt;param name="context" value="public"/&gt;
+                  &lt;param name="l1" value="alaw"/&gt;
+                &lt;/span&gt;
+        &lt;/libpri_spans&gt;
+&lt;/configuration&gt;
+</code></pre>
+
+<p>With this configuration Q931 call setup and digit collection will be handled via ftmod_libpri and you should see calls arrive within the public dialplan context.</p>
+
+<p>Assuming DID 1100 from your provider you could receive a test call as follows:</p>
+
+<p>conf/dialplan/public.xml</p>
+
+<pre><code>&lt;extension name="public_pri_extension"&gt;
+      &lt;condition field="destination_number" expression="^(1100)$"&gt;
+        &lt;action application="transfer" data="$1 XML default"/&gt;
+      &lt;/condition&gt;
+    &lt;/extension&gt;
+</code></pre>
+
+<p>conf/dialplan/default.xml</p>
+
+<pre><code>&lt;extension name="pri_test"&gt;
+      &lt;condition field="destination_number" expression="^1100$"&gt;
+        &lt;action application="answer"/&gt;
+        &lt;action application="sleep" data="1000"/&gt;
+        &lt;action application="playback" data="voicemail/vm-goodbye.wav"/&gt;
+        &lt;action application="sleep" data="20000"/&gt;
+        &lt;action application="hangup"/&gt;
+      &lt;/condition&gt;
+    &lt;/extension&gt;
+</code></pre>
+
+<h3>Support or Contact</h3>
+
+<p>Check out the documentation at <a href="http://support.red-fone.com/">http://support.red-fone.com/</a> or contact <a href="mailto:support@red-fone.com">support@red-fone.com</a> and we’ll help you sort it out.</p>
+        </section>
+
+        <footer>
+          freeswitch-redfone is maintained by <a href="https://github.com/lfurrea">lfurrea</a><br>
+          This page was generated by <a href="http://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="http://twitter.com/jasonlong">Jason Long</a>.
+        </footer>
+
+        
+      </div>
+    </div>
+  </body>
+</html>
